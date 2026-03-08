@@ -1,0 +1,12 @@
+[0m[0m
+[0m[4mC:\Users\HP\Downloads\ride-buddy-main\ride-buddy-main\src\pages\DriverDashboard.tsx[24m[0m
+[0m   [2m28:44[22m  [31merror[39m    Unexpected any. Specify a different type                                                                       [2m@typescript-eslint/no-explicit-any[22m[0m
+[0m   [2m78:46[22m  [31merror[39m    Unexpected any. Specify a different type                                                                       [2m@typescript-eslint/no-explicit-any[22m[0m
+[0m   [2m84:58[22m  [31merror[39m    Unexpected any. Specify a different type                                                                       [2m@typescript-eslint/no-explicit-any[22m[0m
+[0m   [2m86:44[22m  [31merror[39m    Unexpected any. Specify a different type                                                                       [2m@typescript-eslint/no-explicit-any[22m[0m
+[0m  [2m101:38[22m  [33mwarning[39m  React Hook useEffect has a missing dependency: 'fetchRides'. Either include it or remove the dependency array  [2mreact-hooks/exhaustive-deps[22m[0m
+[0m  [2m123:19[22m  [31merror[39m    Unexpected any. Specify a different type                                                                       [2m@typescript-eslint/no-explicit-any[22m[0m
+[0m  [2m210:19[22m  [31merror[39m    Unexpected any. Specify a different type                                                                       [2m@typescript-eslint/no-explicit-any[22m[0m
+[0m[0m
+[0m[31m[1m✖ 7 problems (6 errors, 1 warning)[22m[39m[0m
+[0m[31m[1m[22m[39m[0m

@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Map of India</title>
+
+    <!-- 1. Leaflet CSS for Map Styling -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
+
+    <style>
+        /* General page reset and basic styling */
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            background-color: #f4f4f9;
+        }
+
+        /* Header styling */
+        header {
+            background-color: #3b82f6;
+            color: white;
+            padding: 1rem;
+            text-align: center;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            z-index: 1000;
+        }
+
+        /* Controls bar styling */
+        .controls {
+            padding: 15px;
+            background-color: #ffffff;
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            align-items: center;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+            z-index: 1000;
+        }
+
+        select,
+        button {
+            padding: 10px 15px;
+            font-size: 16px;
+            border-radius: 6px;
+            border: 1px solid #ccc;
+            outline: none;
+        }
+
+        button {
+            background-color: #3b82f6;
+            color: white;
+            border: none;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background-color 0.2s;
+        }
+
+        button:hover {
+            background-color: #2563eb;
+        }
+
+        /* Map container taking up remaining space */
+        #map {
+            flex-grow: 1;
+            width: 100%;
+        }
+    </style>
+</head>
+
+<body>
+
+    <header>
+        <h2>Interactive Map with Nearby Places</h2>
+    </header>
+
+    <!-- Controls for user interactions -->
+    <div class="controls">
+        <label for="place-type">Find nearby:</label>
+        <select id="place-type">
+            <option value="restaurant">Restaurants</option>
+            <option value="hospital">Hospitals</option>
+            <option value="atm">ATMs</option>
+            <option value="hotel">Hotels</option>
+        </select>
+        <button id="search-btn">Search Nearby</button>
+        <button id="locate-btn">My Location</button>
+    </div>
+
+    <!-- Map Container -->
+    <div id="map"></div>
+
+    <!-- 2. Leaflet JS Script -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+
+    <script>
+        // 3. Initialize the map
+        // Set the initial view centered on India (Latitude: 20.5937, Longitude: 78.9629) with zoom level 5
+        const map = L.map('map').setView([20.5937, 78.9629], 5);
+
+        // 4. Add OpenStreetMap tile layer
+        // This fetches map tiles from OSM servers and renders them.
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(map);
+
+        // Variables to keep track of state
+        let userMarker = null; // Marker for the user's location
+        let poiMarkers = [];   // Array to keep track of Point of Interest markers
+        let currentLat = null; // User's current latitude
+        let currentLon = null; // User's current longitude
+
+        // 5. Get User's Location via Browser Geolocation API
+        function locateUser() {
+            if ("geolocation" in navigator) {
+                // Request current position
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        currentLat = position.coords.latitude;
+                        currentLon = position.coords.longitude;
+
+                        // Center the map on the user's location and zoom in
+                        map.setView([currentLat, currentLon], 14);
+
+                        // Remove existing user marker if it exists before adding a new one
+                        if (userMarker) {
+                            map.removeLayer(userMarker);
+                        }
+
+                        // Add a marker for the user's location
+                        userMarker = L.marker([currentLat, currentLon]).addTo(map)
+                            .bindPopup("<b>You are here!</b>").openPopup();
+
+                        // Automatically search nearby places for the selected type
+                        searchPlaces();
+                    },
+                    (error) => {
+                        console.error("Error getting location: ", error.message);
+                        alert("Unable to retrieve your location. Make sure location permissions are enabled in your browser.");
+                    }
+                );
+            } else {
+                alert("Geolocation is not supported by this browser.");
+            }
+        }
+
+        // 6. Fetch Places using OpenStreetMap's Overpass API
+        async function fetchPlaces(lat, lon, type) {
+            // Overpass QL expects appropriate OSM tags ("amenity" vs "tourism")
+            let tag = '';
+            switch (type) {
+                case 'restaurant': tag = '"amenity"="restaurant"'; break;
+                case 'hospital': tag = '"amenity"="hospital"'; break;
+                case 'atm': tag = '"amenity"="atm"'; break;
+                case 'hotel': tag = '"tourism"="hotel"'; break;
+            }
+
+            // Create an Overpass API query:
+            // - Look for nodes, ways, and relations matching the tag.
+            // - Search within a 5000-meter (5km) radius of the given lat/lon.
+            // - "out center;" ensures we get a specific coordinate point even for large areas like hospitals.
+            const query = `
+                [out:json];
+                (
+                  node[${tag}](around:5000,${lat},${lon});
+                  way[${tag}](around:5000,${lat},${lon});
+                  relation[${tag}](around:5000,${lat},${lon});
+                );
+                out center;
+            `;
+
+            const url = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`;
+
+            try {
+                // Show loading state on search button
+                const btn = document.getElementById('search-btn');
+                const originalText = btn.textContent;
+                btn.textContent = "Searching...";
+
+                const response = await fetch(url);
+                const data = await response.json();
+
+                // Revert button text
+                btn.textContent = originalText;
+
+                return data.elements; // Return matching places
+            } catch (error) {
+                console.error("Error fetching places via Overpass API: ", error);
+                alert("Failed to fetch nearby places. The Overpass API might be busy.");
+                return [];
+            }
+        }
+
+        // 7. Render places onto the map
+        async function searchPlaces() {
+            if (!currentLat || !currentLon) {
+                alert("Please click 'My Location' first to detect where you are!");
+                return;
+            }
+
+            const type = document.getElementById('place-type').value;
+
+            // Clear existing Point of Interest (POI) markers from the map before displaying new ones
+            poiMarkers.forEach(marker => map.removeLayer(marker));
+            poiMarkers = [];
+
+            // Fetch data
+            const places = await fetchPlaces(currentLat, currentLon, type);
+
+            // Create markers for each place
+            places.forEach(place => {
+                // Leaflet coordinates: check if it's a node (has lat/lon) or a way/relation (has center object)
+                const lat = place.lat || place.center.lat;
+                const lon = place.lon || place.center.lon;
+
+                // Get the place's name tag or fallback to a custom placeholder
+                const name = place.tags && place.tags.name ? place.tags.name : `Unknown ${type.charAt(0).toUpperCase() + type.slice(1)}`;
+
+                // Create marker, assign a popup, and add it to map
+                const marker = L.marker([lat, lon]).addTo(map)
+                    .bindPopup(`<b>${name}</b><br>${type.charAt(0).toUpperCase() + type.slice(1)}`);
+
+                poiMarkers.push(marker); // Keep reference to remove it later
+            });
+
+            if (places.length === 0) {
+                alert(`No ${type}s found within 5km radius.`);
+            }
+        }
+
+        // 8. Event Listeners for UI interaction
+        document.getElementById('locate-btn').addEventListener('click', locateUser);
+        document.getElementById('search-btn').addEventListener('click', searchPlaces);
+
+        // Trigger user location mapping once on load
+        window.onload = locateUser;
+
+    </script>
+</body>
+
+</html>
