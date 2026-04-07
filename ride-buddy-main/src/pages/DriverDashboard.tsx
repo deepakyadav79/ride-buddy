@@ -74,7 +74,7 @@ export default function DriverDashboard() {
           )
         `)
         .in("ride_id", validRideIds)
-        .eq("status", "pending");
+        .in("status", ["pending", "accepted"]);
 
       if (reqError) {
         console.error("Error fetching bookings:", reqError);
@@ -270,6 +270,7 @@ export default function DriverDashboard() {
     }
   };
 
+
   const statusColor: Record<string, string> = {
     upcoming: "bg-secondary/10 text-secondary",
     in_progress: "bg-accent/10 text-accent",
@@ -340,18 +341,24 @@ export default function DriverDashboard() {
         {requests.length > 0 && (
           <div className="mb-8 space-y-4">
             <h2 className="font-display text-xl font-bold flex items-center gap-2">
-              <Bell className="h-5 w-5 text-primary" /> Pending Requests
+              <Bell className="h-5 w-5 text-primary" /> Requests & Bookings
             </h2>
             {requests.map((req) => (
-              <Card key={req.id} className="shadow-card border-l-4 border-l-primary animate-fade-in">
+              <Card key={req.id} className={`shadow-card border-l-4 ${req.status === 'accepted' ? 'border-l-accent' : 'border-l-primary'} animate-fade-in`}>
                 <CardContent className="flex flex-col gap-4 p-6 sm:flex-row sm:items-center sm:justify-between">
+                  {/* Info Column */}
                   <div className="flex-1 space-y-2">
                     <div className="flex items-center gap-2 font-medium">
                       <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted shrink-0">
                         <User className="h-5 w-5" />
                       </div>
                       <div className="flex flex-col">
-                        <span className="text-base">{req.passenger_name}</span>
+                        <span className="text-base flex items-center gap-2">
+                          {req.passenger_name} 
+                          {req.status === 'accepted' && (
+                            <span className="text-xs bg-accent/10 text-accent px-2 py-0.5 rounded-full">Accepted</span>
+                          )}
+                        </span>
                         <span className="text-sm font-normal text-muted-foreground">{req.passenger_phone}</span>
                       </div>
                     </div>
@@ -365,17 +372,35 @@ export default function DriverDashboard() {
                       <span className="text-primary">{req.seats_booked} seat(s) • ₹{req.total_price}</span>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      onClick={() => handleRequest(req.id, "confirmed", req.ride_id, req.seats_booked)}
-                      disabled={(req.ride?.available_seats || 0) < req.seats_booked}
-                      className={`gap-1 ${((req.ride?.available_seats || 0) < req.seats_booked) ? 'bg-muted text-muted-foreground grayscale cursor-not-allowed' : 'bg-green-500 hover:bg-green-600 text-white'} border-0`}
-                    >
-                      <Check className="h-4 w-4" /> {(req.ride?.available_seats || 0) < req.seats_booked ? "Full" : "Accept"}
-                    </Button>
-                    <Button onClick={() => handleRequest(req.id, "rejected", req.ride_id, req.seats_booked)} variant="outline" className="gap-1 text-destructive hover:bg-destructive/10 border-destructive/20">
-                      <X className="h-4 w-4" /> Reject
-                    </Button>
+
+                  {/* Actions Column */}
+                  <div className="flex items-center gap-2 flex-wrap sm:justify-end">
+                    {req.status === 'pending' && (
+                      <>
+                        <Button
+                          onClick={() => handleRequest(req.id, "confirmed", req.ride_id, req.seats_booked)}
+                          disabled={(req.ride?.available_seats || 0) < req.seats_booked}
+                          className={`gap-1 ${((req.ride?.available_seats || 0) < req.seats_booked) ? 'bg-muted text-muted-foreground grayscale cursor-not-allowed' : 'bg-green-500 hover:bg-green-600 text-white'} border-0`}
+                        >
+                          <Check className="h-4 w-4" /> {(req.ride?.available_seats || 0) < req.seats_booked ? "Full" : "Accept"}
+                        </Button>
+                        <Button onClick={() => handleRequest(req.id, "rejected", req.ride_id, req.seats_booked)} variant="outline" className="gap-1 text-destructive hover:bg-destructive/10 border-destructive/20">
+                          <X className="h-4 w-4" /> Reject
+                        </Button>
+                      </>
+                    )}
+
+
+                    {req.status === 'accepted' && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => window.location.href = `/chat/${req.id}`}
+                        className="gap-2 shrink-0"
+                      >
+                        Message
+                      </Button>
+                    )}
                   </div>
                 </CardContent>
               </Card>

@@ -27,6 +27,8 @@ export type Database = {
           status: string
           total_price: number
           updated_at: string
+          is_verified: boolean | null
+          verification_pin: string | null
         }
         Insert: {
           created_at?: string
@@ -40,6 +42,8 @@ export type Database = {
           status?: string
           total_price: number
           updated_at?: string
+          is_verified?: boolean | null
+          verification_pin?: string | null
         }
         Update: {
           created_at?: string
@@ -53,6 +57,8 @@ export type Database = {
           status?: string
           total_price?: number
           updated_at?: string
+          is_verified?: boolean | null
+          verification_pin?: string | null
         }
         Relationships: [
           {
@@ -62,6 +68,45 @@ export type Database = {
             referencedRelation: "rides"
             referencedColumns: ["id"]
           },
+        ]
+      }
+      chat_messages: {
+        Row: {
+          created_at: string
+          id: string
+          message: string
+          ride_request_id: string
+          sender_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          message: string
+          ride_request_id: string
+          sender_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          message?: string
+          ride_request_id?: string
+          sender_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chat_messages_ride_request_id_fkey"
+            columns: ["ride_request_id"]
+            isOneToOne: false
+            referencedRelation: "ride_requests"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chat_messages_sender_id_fkey"
+            columns: ["sender_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          }
         ]
       }
       emergency_contacts: {

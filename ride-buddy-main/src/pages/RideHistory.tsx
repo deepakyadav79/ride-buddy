@@ -112,13 +112,20 @@ export default function RideHistory() {
                       <span className="text-xs text-muted-foreground">{b.seats_booked} seat(s)</span>
                     </div>
                     {(b.status === "confirmed" || b.status === "accepted" || b.status === "pending") && (
-                      <div className="flex gap-2">
+                      <div className="flex gap-2 flex-wrap justify-end">
                         {(b.status === "confirmed" || b.status === "accepted") && (
-                          <Link to={`/tracking/${b.id}`}>
-                            <Button size="sm" className="gradient-hero text-primary-foreground border-0">
-                              Track Ride
-                            </Button>
-                          </Link>
+                          <>
+                            <Link to={`/tracking/${b.id}`}>
+                              <Button size="sm" className="gradient-hero text-primary-foreground border-0">
+                                Track Ride
+                              </Button>
+                            </Link>
+                            <Link to={`/chat/${b.id}`}>
+                              <Button size="sm" variant="secondary" className="border">
+                                Message
+                              </Button>
+                            </Link>
+                          </>
                         )}
                         <Button size="sm" variant="outline" className="text-destructive" onClick={() => cancelBooking(b.id)}>
                           Cancel

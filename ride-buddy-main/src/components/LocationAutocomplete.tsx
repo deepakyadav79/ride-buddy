@@ -29,18 +29,18 @@ export function LocationAutocomplete({ value, onChange, placeholder, className }
         }
         setLoading(true);
         try {
-            const MAPBOX_KEY = import.meta.env.VITE_MAPBOX_API_KEY;
-            if (!MAPBOX_KEY) {
-                console.warn("Mapbox API Key is missing");
-                return;
-            }
             const res = await fetch(
-                `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(
+                `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(
                     text
-                )}.json?access_token=${MAPBOX_KEY}&autocomplete=true&types=place,locality,neighborhood,address,poi&country=in&limit=5`
+                )}&countrycodes=in&limit=5`,
+                {
+                    headers: {
+                        'Accept-Language': 'en-US,en;q=0.9'
+                    }
+                }
             );
             const data = await res.json();
-            setResults(data.features || []);
+            setResults(data || []);
             setShowDropdown(true);
         } catch (e) {
             console.error(e);
@@ -61,9 +61,16 @@ export function LocationAutocomplete({ value, onChange, placeholder, className }
     };
 
     const handleSelect = (feature: any) => {
-        const placeName = feature.place_name;
-        setQuery(placeName);
-        onChange(placeName);
+        // Find main part and secondary part of the address for simpler display
+        const parts = feature.display_name.split(',').map((p: string) => p.trim());
+        const placeName = feature.display_name;
+        
+        setQuery(parts[0]); // Show mostly the specific primary name in input, or the full name
+        // Better to use the full name for DB matching, so maybe we use parts[0] + ", " + parts[parts.length-1]?
+        // Let's use the full display name for consistency, but if it's too long, maybe only first 2 parts?
+        const shortName = parts.slice(0, 2).join(', ');
+        setQuery(shortName);
+        onChange(shortName);
         setShowDropdown(false);
     };
 
@@ -87,7 +94,7 @@ export function LocationAutocomplete({ value, onChange, placeholder, className }
                 <div className="absolute z-[100] mt-1 w-full rounded-md border bg-card text-card-foreground shadow-lg top-full left-0 max-h-60 overflow-y-auto">
                     {results.map((feature: any) => (
                         <div
-                            key={feature.id}
+                            key={feature.place_id}
                             className="flex items-center gap-2 cursor-pointer px-4 py-2 hover:bg-muted"
                             onMouseDown={(e) => {
                                 e.preventDefault();
@@ -96,9 +103,9 @@ export function LocationAutocomplete({ value, onChange, placeholder, className }
                         >
                             <MapPin className="h-4 w-4 text-muted-foreground shrink-0" />
                             <div className="flex flex-col overflow-hidden">
-                                <span className="truncate text-sm font-medium">{feature.text}</span>
+                                <span className="truncate text-sm font-medium">{feature.display_name.split(',')[0]}</span>
                                 <span className="truncate text-xs text-muted-foreground">
-                                    {feature.place_name.substring(feature.text.length + 2)}
+                                    {feature.display_name.split(',').slice(1).join(',').trim()}
                                 </span>
                             </div>
                         </div>

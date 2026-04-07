@@ -1,11 +1,11 @@
 import { useEffect, useState, useRef } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import Layout from "@/components/Layout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { MapPin, Navigation, ShieldAlert, Loader2 } from "lucide-react";
+import { MapPin, Navigation, ShieldAlert, Loader2, Clock as LucideClock, MessageSquare } from "lucide-react";
 import { toast } from "sonner";
 import { sendSOSAlert } from "@/services/safetyService";
 import L from "leaflet";
@@ -23,9 +23,11 @@ L.Icon.Default.mergeOptions({
   shadowUrl: markerShadow,
 });
 
-const MapComponent = ({ start, destination }: { start: string, destination: string }) => {
+const MapComponent = ({ start, destination, onDistanceUpdate }: { start: string, destination: string, onDistanceUpdate?: (dist: string) => void }) => {
   const mapRef = useRef<HTMLDivElement>(null);
   const [mapError, setMapError] = useState("");
+  const [distance, setDistance] = useState<string | null>(null);
+  const [duration, setDuration] = useState<string | null>(null);
 
   useEffect(() => {
     if (!mapRef.current) return;
@@ -65,6 +67,18 @@ const MapComponent = ({ start, destination }: { start: string, destination: stri
           if (routeData.code === "Ok" && routeData.routes && routeData.routes.length > 0) {
             const coordinates = routeData.routes[0].geometry.coordinates; // array of [lon, lat]
             const latlngs = coordinates.map((c: any) => [c[1], c[0]] as [number, number]);
+
+            // Calculate distance and duration
+            const distMeters = routeData.routes[0].distance;
+            const durationSeconds = routeData.routes[0].duration;
+            
+            const distKm = (distMeters / 1000).toFixed(1);
+            const durMin = Math.round(durationSeconds / 60);
+            const durText = durMin > 60 ? `${Math.floor(durMin / 60)}h ${durMin % 60}m` : `${durMin} min`;
+
+            setDistance(distKm);
+            setDuration(durText);
+            if (onDistanceUpdate) onDistanceUpdate(distKm);
 
             // Draw polyline
             const routeLine = L.polyline(latlngs, { color: '#3b82f6', weight: 5 }).addTo(map);
@@ -128,6 +142,20 @@ const MapComponent = ({ start, destination }: { start: string, destination: stri
           {mapError}
         </div>
       )}
+      {(distance || duration) && (
+        <div className="absolute top-4 left-4 z-[10] bg-background/90 px-3 py-2 rounded-xl shadow-elevated border border-primary/20 backdrop-blur-md flex flex-col gap-1">
+            <div className="flex items-center gap-2">
+                <Navigation className="h-4 w-4 text-primary" />
+                <span className="text-sm font-bold">{distance} km trip</span>
+            </div>
+            {duration && (
+                <div className="flex items-center gap-2 text-muted-foreground border-t border-border/50 pt-1 mt-1">
+                    <LucideClock className="h-3 w-3" />
+                    <span className="text-xs font-semibold">Est: {duration}</span>
+                </div>
+            )}
+        </div>
+      )}
       {/* Set z-index 0 to not overlap navbar dropdowns and positioning absolute */}
       <div ref={mapRef} className="w-full h-full absolute inset-0 z-0"></div>
     </div>
@@ -137,6 +165,7 @@ const MapComponent = ({ start, destination }: { start: string, destination: stri
 export default function RideTracking() {
   const { rideId } = useParams();
   const { user } = useAuth();
+  const navigate = useNavigate();
 
   const [booking, setBooking] = useState<any>(null);
   const [ride, setRide] = useState<any>(null);
@@ -144,6 +173,86 @@ export default function RideTracking() {
   const [passenger, setPassenger] = useState<any>(null);
   const [emergencyContacts, setEmergencyContacts] = useState<any[]>([]);
   const [sosLoading, setSosLoading] = useState(false);
+  const [unreadChatCount, setUnreadChatCount] = useState(0);
+
+  // Realtime subscription for unread chat count
+  useEffect(() => {
+    if (!user) return;
+
+    const fetchUnread = async () => {
+      const { data, error } = await supabase
+        .from('notifications')
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('type', 'chat')
+        .eq('is_read', false);
+      
+      if (!error && data) {
+        setUnreadChatCount(data.length);
+      }
+    };
+    fetchUnread();
+
+    const channel = supabase
+      .channel(`chat_badge_${user.id}`)
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'notifications',
+        filter: `user_id=eq.${user.id}`
+      }, (payload: any) => {
+        if (payload.new.type === 'chat') {
+           setUnreadChatCount(prev => prev + 1);
+        }
+      })
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'notifications',
+        filter: `user_id=eq.${user.id}`
+      }, (payload: any) => {
+         if (payload.new.type === 'chat' && payload.new.is_read) {
+            setUnreadChatCount(prev => Math.max(0, prev - 1));
+         }
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user]);
+
+  // Explicit fallback alert listener for new messages while staring at tracking view
+  useEffect(() => {
+    if (!rideId || !user) return;
+
+    const chatAlertChannel = supabase
+      .channel(`direct_chat_alert_${rideId}_${user.id}`)
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'chat_messages',
+        filter: `ride_request_id=eq.${rideId}`
+      }, (payload: any) => {
+        // If it's not sent by ME, alert me
+        if (payload.new.sender_id !== user.id) {
+           toast("💬 New Message Received", {
+             description: payload.new.message,
+             action: {
+               label: "Reply",
+               onClick: () => navigate(`/chat/${rideId}`)
+             }
+           });
+           // Guarantee the badge updates even if the SQL trigger failed
+           setUnreadChatCount(prev => prev + 1);
+        }
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(chatAlertChannel);
+    };
+  }, [rideId, user, navigate]);
 
   useEffect(() => {
     async function fetchDetails() {
@@ -154,7 +263,7 @@ export default function RideTracking() {
         setBooking(bData);
 
         // Fetch passenger profile
-        const { data: pData } = await supabase.from('profiles').select('*').eq('user_id', bData.passenger_id).single();
+        const { data: pData } = await supabase.from('profiles').select('*').eq('user_id', bData.passenger_id).maybeSingle();
         if (pData) setPassenger(pData);
 
         // fetch the ride assigned to that booking
@@ -162,7 +271,7 @@ export default function RideTracking() {
         if (rData) {
           setRide(rData);
           // fetch driver profile info
-          const { data: dData } = await supabase.from('profiles').select('*').eq('user_id', rData.driver_id).single();
+          const { data: dData } = await supabase.from('profiles').select('*').eq('user_id', rData.driver_id).maybeSingle();
           if (dData) setDriver(dData);
         }
 
@@ -274,6 +383,18 @@ export default function RideTracking() {
                   <span className="h-2 w-2 rounded-full bg-accent animate-pulse-dot" />
                   <span className="text-sm font-medium text-accent">Live</span>
                 </div>
+                <Button
+                  onClick={() => navigate(`/chat/${rideId}`)}
+                  variant="outline"
+                  className="gap-2 font-bold shadow-sm transition-all shrink-0 relative"
+                >
+                  <MessageSquare className="h-4 w-4" /> Chat
+                  {unreadChatCount > 0 && (
+                    <span className="absolute -top-2 -right-2 flex h-5 w-5 items-center justify-center rounded-full bg-destructive text-[10px] text-destructive-foreground animate-bounce">
+                      {unreadChatCount}
+                    </span>
+                  )}
+                </Button>
                 <Button
                   onClick={handleSOS}
                   disabled={sosLoading}

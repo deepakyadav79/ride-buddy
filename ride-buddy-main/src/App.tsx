@@ -12,6 +12,7 @@ import DriverDashboard from "./pages/DriverDashboard";
 import RideHistory from "./pages/RideHistory";
 import Profile from "./pages/Profile";
 import RideTracking from "./pages/RideTracking";
+import Chat from "./pages/Chat";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -32,6 +33,7 @@ const App = () => (
             <Route path="/history" element={<RideHistory />} />
             <Route path="/profile" element={<Profile />} />
             <Route path="/tracking/:rideId" element={<RideTracking />} />
+            <Route path="/chat/:requestId" element={<Chat />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AuthProvider>
